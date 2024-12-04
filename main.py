@@ -13,7 +13,7 @@ st.write(
     이 앱은 여러 개의 PPT, PPTX, 또는 PDF 파일을 하나의 PDF 파일로 결합할 수 있도록 도와줍니다. 😊  
     **사용 방법:**  
     1. 파일을 업로드합니다 (PPT, PPTX, PDF만 가능합니다).  
-    2. 파일 순서를 확인하거나 변경합니다.  
+    2. 파일 순서를 입력하여 정렬합니다.  
     3. 결합된 파일의 이름을 설정합니다.  
     4. '결합하기' 버튼을 클릭하여 하나의 PDF로 결합합니다!  
     """
@@ -27,15 +27,31 @@ uploaded_files = st.file_uploader(
 )
 
 if uploaded_files:
-    # Display uploaded files and allow reordering
-    st.write("### 업로드된 파일 목록 및 순서 조정")
+    st.write("### 업로드된 파일 목록")
     filenames = [file.name for file in uploaded_files]
-    filenames_sorted = st.experimental_data_editor(
-        pd.DataFrame({"파일 이름": filenames}),
-        use_container_width=True
-    )["파일 이름"].tolist()
+    
+    # 순서 변경을 위한 입력
+    st.write("#### 파일 순서를 설정하세요:")
+    sorted_files = []
+    for i, filename in enumerate(filenames):
+        order = st.number_input(
+            f"'{filename}'의 순서를 입력하세요:", 
+            min_value=1, 
+            max_value=len(filenames), 
+            value=i + 1, 
+            step=1
+        )
+        sorted_files.append((filename, order))
+    
+    # 사용자가 입력한 순서대로 정렬
+    sorted_files = sorted(sorted_files, key=lambda x: x[1])
+    filenames_sorted = [file[0] for file in sorted_files]
+    
+    # 결과 출력
+    st.write("#### 선택된 순서:")
+    st.write(filenames_sorted)
 
-    # File name for the final merged file
+    # 결합된 파일의 이름 설정
     default_output_name = "결합된_파일.pdf"
     output_name = st.text_input(
         "📁 저장할 파일 이름을 입력하세요 (기본값: 결합된_파일.pdf)", 
@@ -49,9 +65,9 @@ if uploaded_files:
         temp_dir.mkdir(exist_ok=True)
 
         merger = PdfMerger()
-        for filename in filenames_sorted:
-            file = next(f for f in uploaded_files if f.name == filename)
-            if file.type in ["application/pdf"]:
+        for sorted_filename in filenames_sorted:
+            file = next(f for f in uploaded_files if f.name == sorted_filename)
+            if file.type == "application/pdf":
                 # Directly add PDF files
                 merger.append(file)
             elif file.type in ["application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation"]:
@@ -81,3 +97,4 @@ if uploaded_files:
         temp_dir.rmdir()
 
         st.success("파일 결합이 완료되었습니다! 🎉")
+
