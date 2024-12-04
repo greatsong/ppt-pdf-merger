@@ -4,18 +4,17 @@ from pptx import Presentation
 from pathlib import Path
 from io import BytesIO
 import subprocess
+from streamlit_sortables import sort_items
 
 # PPT 파일을 PPTX로 변환하는 함수
-def convert_ppt_to_pptx(input_file, output_dir):
-    output_file = Path(output_dir) / f"{Path(input_file).stem}.pptx"
-    with open(input_file, "wb") as f:
-        f.write(input_file.read())
+def convert_ppt_to_pptx(input_file_path, output_dir):
+    output_file = Path(output_dir) / f"{Path(input_file_path).stem}.pptx"
     subprocess.run([
         "libreoffice", 
         "--headless", 
         "--convert-to", "pptx", 
         "--outdir", str(output_dir), 
-        str(input_file)
+        str(input_file_path)
     ])
     return output_file
 
@@ -30,34 +29,28 @@ uploaded_files = st.file_uploader(
 )
 
 if uploaded_files:
-    # 파일을 PPT와 PDF로 분류
-    ppt_files = [file for file in uploaded_files if file.type in ["application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation"]]
-    pdf_files = [file for file in uploaded_files if file.type == "application/pdf"]
+    # 파일 이름 목록
+    filenames = [file.name for file in uploaded_files]
 
-    # 기본적으로 파일 이름 오름차순 정렬
-    ppt_files = sorted(ppt_files, key=lambda f: f.name)
-    pdf_files = sorted(pdf_files, key=lambda f: f.name)
+    # 기본 파일 순서 (오름차순 정렬)
+    filenames = sorted(filenames)
 
-    # 사용자에게 선택된 파일 확인
-    if ppt_files:
-        st.write("### PPT 파일 목록")
-        st.write([file.name for file in ppt_files])
+    # Drag-and-Drop으로 파일 순서 변경
+    st.write("### 파일 순서를 Drag-and-Drop으로 변경하세요:")
+    sorted_filenames = sort_items(filenames)
 
-    if pdf_files:
-        st.write("### PDF 파일 목록")
-        st.write([file.name for file in pdf_files])
+    st.write("#### 선택된 파일 순서:")
+    st.write(sorted_filenames)
 
     # 출력 파일 이름 설정
-    if ppt_files:
-        ppt_output_name = st.text_input(
-            "📁 PPT 결합 파일 이름 (기본값: merged.pptx)",
-            value="merged.pptx"
-        )
-    if pdf_files:
-        pdf_output_name = st.text_input(
-            "📁 PDF 결합 파일 이름 (기본값: merged.pdf)",
-            value="merged.pdf"
-        )
+    ppt_output_name = st.text_input(
+        "📁 PPT 결합 파일 이름 (기본값: merged.pptx)", 
+        value="merged.pptx"
+    )
+    pdf_output_name = st.text_input(
+        "📁 PDF 결합 파일 이름 (기본값: merged.pdf)", 
+        value="merged.pdf"
+    )
 
     # 결합 버튼
     if st.button("결합하기"):
@@ -65,55 +58,61 @@ if uploaded_files:
         temp_dir.mkdir(exist_ok=True)
 
         # PPT 결합 처리
-        if ppt_files:
-            try:
-                merged_presentation = Presentation()
-                for ppt_file in ppt_files:
-                    if ppt_file.name.endswith(".ppt"):
-                        # PPT 파일을 PPTX로 변환
-                        converted_path = convert_ppt_to_pptx(ppt_file, temp_dir)
-                        with open(converted_path, "rb") as converted_file:
-                            ppt_file = converted_file
+        try:
+            merged_presentation = Presentation()
+            for filename in sorted_filenames:
+                file = next(f for f in uploaded_files if f.name == filename)
+                temp_file_path = temp_dir / file.name
 
-                    presentation = Presentation(BytesIO(ppt_file.read()))
-                    for slide in presentation.slides:
-                        blank_slide_layout = merged_presentation.slide_layouts[6]
-                        slide_copy = merged_presentation.slides.add_slide(blank_slide_layout)
-                        for shape in slide.shapes:
-                            el = shape.element
-                            slide_copy.shapes._spTree.insert_element_before(el, 'p:extLst')
+                # 파일 임시 저장
+                with open(temp_file_path, "wb") as temp_file:
+                    temp_file.write(file.read())
 
-                # 저장
-                ppt_output_path = temp_dir / ppt_output_name
-                merged_presentation.save(ppt_output_path)
-                with open(ppt_output_path, "rb") as f:
-                    st.download_button(
-                        "📥 PPT 결합 파일 다운로드",
-                        f,
-                        file_name=ppt_output_name,
-                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
-                    )
-            except Exception as e:
-                st.error(f"PPT 결합 중 오류 발생: {e}")
+                # PPT 파일을 PPTX로 변환
+                if temp_file_path.suffix == ".ppt":
+                    temp_file_path = convert_ppt_to_pptx(temp_file_path, temp_dir)
+
+                # PPTX 파일 읽기 및 슬라이드 결합
+                presentation = Presentation(temp_file_path)
+                for slide in presentation.slides:
+                    blank_slide_layout = merged_presentation.slide_layouts[6]
+                    slide_copy = merged_presentation.slides.add_slide(blank_slide_layout)
+                    for shape in slide.shapes:
+                        el = shape.element
+                        slide_copy.shapes._spTree.insert_element_before(el, 'p:extLst')
+
+            # 저장
+            ppt_output_path = temp_dir / ppt_output_name
+            merged_presentation.save(ppt_output_path)
+            with open(ppt_output_path, "rb") as f:
+                st.download_button(
+                    "📥 PPT 결합 파일 다운로드",
+                    f,
+                    file_name=ppt_output_name,
+                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                )
+        except Exception as e:
+            st.error(f"PPT 결합 중 오류 발생: {e}")
 
         # PDF 결합 처리
-        if pdf_files:
-            try:
-                merger = PdfMerger()
-                for pdf_file in pdf_files:
-                    merger.append(pdf_file)
-                pdf_output_path = temp_dir / pdf_output_name
-                merger.write(pdf_output_path)
-                merger.close()
-                with open(pdf_output_path, "rb") as f:
-                    st.download_button(
-                        "📥 PDF 결합 파일 다운로드",
-                        f,
-                        file_name=pdf_output_name,
-                        mime="application/pdf"
-                    )
-            except Exception as e:
-                st.error(f"PDF 결합 중 오류 발생: {e}")
+        try:
+            merger = PdfMerger()
+            for filename in sorted_filenames:
+                file = next(f for f in uploaded_files if f.name == filename)
+                if file.type == "application/pdf":
+                    merger.append(BytesIO(file.read()))
+            pdf_output_path = temp_dir / pdf_output_name
+            merger.write(pdf_output_path)
+            merger.close()
+            with open(pdf_output_path, "rb") as f:
+                st.download_button(
+                    "📥 PDF 결합 파일 다운로드",
+                    f,
+                    file_name=pdf_output_name,
+                    mime="application/pdf"
+                )
+        except Exception as e:
+            st.error(f"PDF 결합 중 오류 발생: {e}")
 
         # 임시 파일 정리
         for temp_file in temp_dir.iterdir():
