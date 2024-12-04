@@ -10,12 +10,11 @@ from streamlit_sortables import sort_items
 # 슬라이드 복사 함수 (XML 기반)
 def copy_slide(presentation, slide):
     slide_element = slide._element
-    slide_id = presentation.slides._sldIdLst[-1].id + 1
     new_slide_element = parse_xml(slide_element.xml)
     presentation.slides._sldIdLst.append(new_slide_element)
 
-# Streamlit 앱 시작
-st.title("📎 PPTX & PDF 병합 도구(by 석리송)")
+# Streamlit 앱
+st.title("📎 PDF & PPTX 병합 도구")
 
 # 파일 업로드
 uploaded_files = st.file_uploader(
@@ -35,23 +34,16 @@ if uploaded_files:
     st.write(sorted_filenames)
 
     # 출력 파일 이름 설정
-    pptx_output_name = st.text_input(
-        "📁 PPTX 결합 파일 이름 (기본값: merged.pptx)", 
-        value="merged.pptx"
-    )
-    pdf_output_name = st.text_input(
-        "📁 PDF 결합 파일 이름 (기본값: merged.pdf)", 
-        value="merged.pdf"
-    )
+    pptx_output_name = st.text_input("📁 PPTX 결합 파일 이름", value="merged.pptx")
+    pdf_output_name = st.text_input("📁 PDF 결합 파일 이름", value="merged.pdf")
 
-    # 결합 버튼
     if st.button("결합하기"):
         temp_dir = Path("temp_files")
         temp_dir.mkdir(exist_ok=True)
 
         # PPTX 병합 처리
         try:
-            merged_presentation = Presentation()
+            merged_presentation = Presentation()  # 빈 프레젠테이션 생성
             for filename in sorted_filenames:
                 file = next(f for f in uploaded_files if f.name == filename)
                 if file.name.endswith(".pptx"):
