@@ -6,7 +6,7 @@ from io import BytesIO
 from streamlit_sortables import sort_items
 
 # App Title
-st.title("📎 PPTX & PDF 결합 도구 (By 석리송)")
+st.title("📎 PPTX & PDF 병합 도구(by 석리송)")
 
 # File Upload
 uploaded_files = st.file_uploader(
@@ -54,6 +54,11 @@ if uploaded_files:
                         # PPTX 파일 읽기
                         presentation = Presentation(BytesIO(file.read()))
                         for slide in presentation.slides:
+                            # 원본 슬라이드 크기 동기화
+                            merged_presentation.slide_width = presentation.slide_width
+                            merged_presentation.slide_height = presentation.slide_height
+
+                            # 슬라이드 복사
                             blank_slide_layout = merged_presentation.slide_layouts[6]
                             slide_copy = merged_presentation.slides.add_slide(blank_slide_layout)
                             for shape in slide.shapes:
