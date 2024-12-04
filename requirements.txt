@@ -3,3 +3,4 @@ pypdf2
 python-pptx
 pandas
 streamlit-sortables
+libreoffice
