@@ -1,15 +1,15 @@
-from io import BytesIO
-
 import streamlit as st
-from PyPDF2 import PdfMerger, PdfReader
+from PyPDF2 import PdfMerger
+from pathlib import Path
+from io import BytesIO
 from streamlit_sortables import sort_items
 
 # 앱 제목
 st.title("📎 PDF 병합 도구 (By 석리송)")
 
-# 업로드 파일 수집
+# 파일 업로드
 uploaded_files = st.file_uploader(
-    "📤 병합할 PDF 파일을 업로드하세요 (Drag-and-Drop 가능)", 
+    "📤 병합할 PDF 파일을 업로드하세요", 
     type=["pdf"], 
     accept_multiple_files=True
 )
@@ -17,56 +17,52 @@ uploaded_files = st.file_uploader(
 if uploaded_files:
     filenames = [file.name for file in uploaded_files]
 
-    # 기본 파일 순서 정렬
+    # 파일 이름 정렬
     filenames = sorted(filenames)
 
-    # PDF 파일의 첫 페이지 텍스트 미리보기
-    st.write("### 업로드된 PDF 미리보기 (첫 페이지 텍스트)")
-    for file in uploaded_files:
-        reader = PdfReader(BytesIO(file.read()))
-        first_page_text = reader.pages[0].extract_text() if len(reader.pages) > 0 else "빈 문서입니다."
-        st.write(f"**{file.name}** - 첫 페이지 미리보기:")
-        st.text(first_page_text[:500])  # 500자까지만 표시
-
-    # 파일 순서 변경
-    st.write("### 파일 순서를 Drag-and-Drop 또는 입력으로 변경하세요:")
+    # Drag-and-Drop으로 파일 순서 변경
+    st.write("### 파일 순서를 Drag-and-Drop으로 변경하세요:")
     sorted_filenames = sort_items(filenames)
-    custom_order = st.text_input(
-        "📋 파일 순서를 쉼표로 구분하여 입력하세요 (예: 2,1,3):",
-        value=",".join(map(str, range(1, len(sorted_filenames) + 1))),
-    )
-    try:
-        indices = list(map(int, custom_order.split(",")))
-        sorted_filenames = [filenames[i - 1] for i in indices]
-    except (ValueError, IndexError):
-        st.error("순서 입력이 잘못되었습니다. 올바른 숫자를 쉼표로 구분해 입력해주세요.")
-
-    st.write("#### 최종 파일 순서:")
+    st.write("#### 선택된 파일 순서:")
     st.write(sorted_filenames)
 
     # 출력 파일 이름 설정
-    pdf_output_name = st.text_input("📁 병합된 PDF 파일 이름", value="merged.pdf")
+    pdf_output_name = st.text_input(
+        "📁 병합된 PDF 파일 이름", 
+        value="merged.pdf"
+    )
 
-    # 병합 및 다운로드
-    if st.button("📥 PDF 병합"):
+    # 결합 버튼
+    if st.button("결합하기"):
+        temp_dir = Path("temp_files")
+        temp_dir.mkdir(exist_ok=True)
+
         try:
+            # PDF 병합 처리
             merger = PdfMerger()
             for filename in sorted_filenames:
                 file = next(f for f in uploaded_files if f.name == filename)
                 merger.append(BytesIO(file.read()))
 
-            # 병합 결과 제공
-            with BytesIO() as buffer:
-                merger.write(buffer)
+            # 병합 결과 저장
+            pdf_output_path = temp_dir / pdf_output_name
+            merger.write(pdf_output_path)
+            merger.close()
+
+            # 다운로드 버튼 제공
+            with open(pdf_output_path, "rb") as f:
                 st.download_button(
                     "📥 병합된 PDF 다운로드",
-                    data=buffer.getvalue(),
+                    f,
                     file_name=pdf_output_name,
-                    mime="application/pdf",
+                    mime="application/pdf"
                 )
-            merger.close()
         except Exception as e:
             st.error(f"PDF 병합 중 오류 발생: {e}")
 
+        # 임시 파일 정리
+        for temp_file in temp_dir.iterdir():
+            temp_file.unlink()
+        temp_dir.rmdir()
 else:
     st.warning("최소 하나의 PDF 파일을 업로드해주세요.")
