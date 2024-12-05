@@ -1,96 +1,114 @@
 import streamlit as st
-from PyPDF2 import PdfMerger
-from pptx import Presentation
-from pptx.oxml import parse_xml
-from pptx.oxml.ns import qn
+from PyPDF2 import PdfMerger, PdfReader, PdfWriter
 from pathlib import Path
 from io import BytesIO
 from streamlit_sortables import sort_items
+import base64
 
-# 슬라이드 복사 함수 (XML 기반)
-def copy_slide(presentation, slide):
-    slide_element = slide._element
-    new_slide_element = parse_xml(slide_element.xml)
-    presentation.slides._sldIdLst.append(new_slide_element)
+# 앱 제목
+st.title("📎 PDF 병합 & 분할 도구 (By 석리송)")
 
-# Streamlit 앱
-st.title("📎 PDF & PPTX 병합 도구")
-
-# 파일 업로드
+# 업로드 파일 수집
 uploaded_files = st.file_uploader(
-    "📤 PDF와 PPTX 파일을 업로드하세요 (Drag-and-Drop 가능)", 
-    type=["pdf", "pptx"], 
+    "📤 병합할 PDF 파일을 업로드하세요 (Drag-and-Drop 가능)", 
+    type=["pdf"], 
     accept_multiple_files=True
 )
 
 if uploaded_files:
     filenames = [file.name for file in uploaded_files]
+
+    # 기본 파일 순서 정렬
     filenames = sorted(filenames)
 
+    # 파일 미리보기 제공
+    st.write("### 업로드된 PDF 미리보기")
+    for file in uploaded_files:
+        reader = PdfReader(BytesIO(file.read()))
+        first_page = reader.pages[0]
+        st.write(f"**{file.name}** - {len(reader.pages)} 페이지")
+        with BytesIO() as buffer:
+            writer = PdfWriter()
+            writer.add_page(first_page)
+            writer.write(buffer)
+            st.image(buffer.getvalue(), caption=f"첫 페이지 미리보기 - {file.name}", width=400)
+
     # 파일 순서 변경
-    st.write("### 파일 순서를 Drag-and-Drop으로 변경하세요:")
+    st.write("### 파일 순서를 Drag-and-Drop 또는 입력으로 변경하세요:")
     sorted_filenames = sort_items(filenames)
-    st.write("#### 선택된 파일 순서:")
+
+    # 숫자 입력을 통한 순서 변경 추가
+    custom_order = st.text_input(
+        "📋 파일 순서를 쉼표로 구분하여 입력하세요 (예: 2,1,3):",
+        value=",".join(map(str, range(1, len(sorted_filenames) + 1))),
+    )
+    try:
+        indices = list(map(int, custom_order.split(",")))
+        sorted_filenames = [filenames[i - 1] for i in indices]
+    except (ValueError, IndexError):
+        st.error("순서 입력이 잘못되었습니다. 올바른 숫자를 쉼표로 구분해 입력해주세요.")
+
+    st.write("#### 최종 파일 순서:")
     st.write(sorted_filenames)
 
     # 출력 파일 이름 설정
-    pptx_output_name = st.text_input("📁 PPTX 결합 파일 이름", value="merged.pptx")
-    pdf_output_name = st.text_input("📁 PDF 결합 파일 이름", value="merged.pdf")
+    pdf_output_name = st.text_input("📁 병합된 PDF 파일 이름", value="merged.pdf")
 
-    if st.button("결합하기"):
-        temp_dir = Path("temp_files")
-        temp_dir.mkdir(exist_ok=True)
-
-        # PPTX 병합 처리
-        try:
-            merged_presentation = Presentation()  # 빈 프레젠테이션 생성
-            for filename in sorted_filenames:
-                file = next(f for f in uploaded_files if f.name == filename)
-                if file.name.endswith(".pptx"):
-                    presentation = Presentation(BytesIO(file.read()))
-                    for slide in presentation.slides:
-                        # 원본 슬라이드 크기 동기화
-                        merged_presentation.slide_width = presentation.slide_width
-                        merged_presentation.slide_height = presentation.slide_height
-                        # 슬라이드 복사
-                        copy_slide(merged_presentation, slide)
-
-            # 저장
-            pptx_output_path = temp_dir / pptx_output_name
-            merged_presentation.save(pptx_output_path)
-            with open(pptx_output_path, "rb") as f:
-                st.download_button(
-                    "📥 PPTX 병합 파일 다운로드",
-                    f,
-                    file_name=pptx_output_name,
-                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
-                )
-        except Exception as e:
-            st.error(f"PPTX 병합 중 오류 발생: {e}")
-
-        # PDF 병합 처리
+    # 병합 및 다운로드
+    if st.button("📥 PDF 병합"):
         try:
             merger = PdfMerger()
             for filename in sorted_filenames:
                 file = next(f for f in uploaded_files if f.name == filename)
-                if file.name.endswith(".pdf"):
-                    merger.append(BytesIO(file.read()))
-            pdf_output_path = temp_dir / pdf_output_name
-            merger.write(pdf_output_path)
-            merger.close()
-            with open(pdf_output_path, "rb") as f:
+                merger.append(BytesIO(file.read()))
+
+            # 병합 결과 제공
+            with BytesIO() as buffer:
+                merger.write(buffer)
                 st.download_button(
-                    "📥 PDF 병합 파일 다운로드",
-                    f,
+                    "📥 병합된 PDF 다운로드",
+                    data=buffer.getvalue(),
                     file_name=pdf_output_name,
-                    mime="application/pdf"
+                    mime="application/pdf",
                 )
+            merger.close()
         except Exception as e:
             st.error(f"PDF 병합 중 오류 발생: {e}")
 
-        # 임시 파일 정리
-        for temp_file in temp_dir.iterdir():
-            temp_file.unlink()
-        temp_dir.rmdir()
+    # PDF 분할 기능
+    st.write("### 추가 기능: PDF 분할")
+    split_file = st.selectbox("📂 분할할 PDF 파일을 선택하세요:", filenames)
+    if split_file:
+        page_range = st.text_input(
+            "📄 분할할 페이지 범위를 입력하세요 (예: 1-3,5):",
+            value="1-3",
+        )
+        try:
+            file = next(f for f in uploaded_files if f.name == split_file)
+            reader = PdfReader(BytesIO(file.read()))
+            writer = PdfWriter()
+
+            # 페이지 범위 파싱
+            ranges = page_range.split(",")
+            for r in ranges:
+                if "-" in r:
+                    start, end = map(int, r.split("-"))
+                    for i in range(start - 1, end):
+                        writer.add_page(reader.pages[i])
+                else:
+                    writer.add_page(reader.pages[int(r) - 1])
+
+            # 분할 파일 다운로드 제공
+            with BytesIO() as buffer:
+                writer.write(buffer)
+                st.download_button(
+                    "📥 분할된 PDF 다운로드",
+                    data=buffer.getvalue(),
+                    file_name=f"split_{split_file}",
+                    mime="application/pdf",
+                )
+        except Exception as e:
+            st.error(f"PDF 분할 중 오류 발생: {e}")
+
 else:
-    st.warning("최소 하나의 PDF 또는 PPTX 파일을 업로드해주세요.")
+    st.warning("최소 하나의 PDF 파일을 업로드해주세요.")
