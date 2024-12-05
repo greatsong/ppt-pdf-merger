@@ -1,6 +1,7 @@
+from io import BytesIO
+
 import streamlit as st
 from PyPDF2 import PdfMerger, PdfReader
-from io import BytesIO
 from streamlit_sortables import sort_items
 
 # 앱 제목
