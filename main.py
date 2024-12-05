@@ -1,12 +1,10 @@
 import streamlit as st
-from PyPDF2 import PdfMerger, PdfReader, PdfWriter
-from pdf2image import convert_from_bytes
+from PyPDF2 import PdfMerger, PdfReader
 from io import BytesIO
-from pathlib import Path
 from streamlit_sortables import sort_items
 
 # 앱 제목
-st.title("📎 PDF 병합 & 분할 도구 (By 석리송)")
+st.title("📎 PDF 병합 도구 (By 석리송)")
 
 # 업로드 파일 수집
 uploaded_files = st.file_uploader(
@@ -21,12 +19,13 @@ if uploaded_files:
     # 기본 파일 순서 정렬
     filenames = sorted(filenames)
 
-    # PDF 파일의 첫 페이지를 이미지로 변환하여 미리보기
-    st.write("### 업로드된 PDF 미리보기")
+    # PDF 파일의 첫 페이지 텍스트 미리보기
+    st.write("### 업로드된 PDF 미리보기 (첫 페이지 텍스트)")
     for file in uploaded_files:
-        first_page_image = convert_from_bytes(file.read(), first_page=1, last_page=1)[0]
-        st.write(f"**{file.name}** - 미리보기")
-        st.image(first_page_image, caption=f"첫 페이지 미리보기 - {file.name}", width=400)
+        reader = PdfReader(BytesIO(file.read()))
+        first_page_text = reader.pages[0].extract_text() if len(reader.pages) > 0 else "빈 문서입니다."
+        st.write(f"**{file.name}** - 첫 페이지 미리보기:")
+        st.text(first_page_text[:500])  # 500자까지만 표시
 
     # 파일 순서 변경
     st.write("### 파일 순서를 Drag-and-Drop 또는 입력으로 변경하세요:")
